@@ -12,6 +12,7 @@ export type ParkingSlot = {
   id: string
   zone: string
   status: "available" | "occupied" | "error"
+  userId: string | null
 }
 
 export type Invoice = {
@@ -40,6 +41,17 @@ export type Review = {
   createdAt: string
 }
 
+export type ParkingSession = {
+  id: string
+  userId: string
+  slotId: string        // ví dụ "A02"
+  entryTime: string     // ISO string
+  exitTime: string | null
+  status: "active" | "closed"
+}
+
+export type BKPayMode = "success" | "failure" | "random"
+
 // ── Users ──
 export const users: User[] = [
   { id: "SV001", name: "Nguyễn Văn An",     role: "student",  password: "123" },
@@ -52,19 +64,19 @@ export const users: User[] = [
 
 // ── Parking Slots ──
 export const parkingSlots: ParkingSlot[] = [
-  { id: "A01", zone: "A", status: "occupied"  },
-  { id: "A02", zone: "A", status: "available" },
-  { id: "A03", zone: "A", status: "available" },
-  { id: "A04", zone: "A", status: "occupied"  },
-  { id: "A05", zone: "A", status: "available" },
-  { id: "B01", zone: "B", status: "available" },
-  { id: "B02", zone: "B", status: "error"     },
-  { id: "B03", zone: "B", status: "occupied"  },
-  { id: "B04", zone: "B", status: "available" },
-  { id: "B05", zone: "B", status: "occupied"  },
-  { id: "C01", zone: "C", status: "available" },
-  { id: "C02", zone: "C", status: "available" },
-  { id: "C03", zone: "C", status: "occupied"  },
+  { id: "A01", zone: "A", status: "available", userId: null },
+  { id: "A02", zone: "A", status: "occupied",  userId: "SV001" },
+  { id: "A03", zone: "A", status: "available", userId: null },
+  { id: "A04", zone: "A", status: "available", userId: null },
+  { id: "A05", zone: "A", status: "available", userId: null },
+  { id: "B01", zone: "B", status: "available", userId: null },
+  { id: "B02", zone: "B", status: "error",     userId: null },
+  { id: "B03", zone: "B", status: "occupied",  userId: "GV001" },
+  { id: "B04", zone: "B", status: "available", userId: null },
+  { id: "B05", zone: "B", status: "available", userId: null },
+  { id: "C01", zone: "C", status: "available", userId: null },
+  { id: "C02", zone: "C", status: "available", userId: null },
+  { id: "C03", zone: "C", status: "occupied",  userId: "NV001" },
 ]
 
 // ── Invoices ──
@@ -107,4 +119,49 @@ export const pricingPolicy = {
   lecturer: 0,       // miễn phí
   staff:    30000,   // VNĐ/tháng
   visitor:  5000,    // VNĐ/giờ
+}
+
+export const parkingSessions: ParkingSession[] = [
+  // Dữ liệu mẫu — khớp với slots đã gán userId ở trên
+  {
+    id: "PS001",
+    userId: "SV001",
+    slotId: "A02",
+    entryTime: "2025-04-30T07:45:00",
+    exitTime: null,
+    status: "active",
+  },
+  {
+    id: "PS002",
+    userId: "GV001",
+    slotId: "B03",
+    entryTime: "2025-04-30T08:10:00",
+    exitTime: null,
+    status: "active",
+  },
+]
+
+export const systemSettings = {
+  pricing: {
+    student:  2000,   // VNĐ/lượt
+    lecturer: 0,       // miễn phí
+    staff:    0,       // miễn phí
+    visitor:  5000,    // VNĐ/lượt
+  },
+  parking: {
+    nearFullThreshold: 80,   // % → hiển thị "Gần đầy"
+    totalSlots: {
+      A: 5,
+      B: 5,
+      C: 5,
+    },
+  },
+  billing: {
+    cycleDays: 30,    // chu kỳ tính phí
+    dueDays:   7,     // số ngày được phép thanh toán trễ
+  },
+  bkpay: {
+    simulateMode: "success" as BKPayMode,
+    delayMs: 1500,
+  },
 }
