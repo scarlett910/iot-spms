@@ -42,12 +42,13 @@ export type Review = {
 }
 
 export type ParkingSession = {
-  id: string
-  userId: string
-  slotId: string        // ví dụ "A02"
-  entryTime: string     // ISO string
-  exitTime: string | null
-  status: "active" | "closed"
+  id:        string
+  userId:    string
+  subZoneId: string        // "B1", "C2"...
+  entryTime: string
+  exitTime:  string | null
+  status:    "active" | "closed"
+  fee:       number | null  // null khi còn active, tính khi đóng session
 }
 
 export type BKPayMode = "success" | "failure" | "random"
@@ -121,47 +122,51 @@ export const pricingPolicy = {
   visitor:  5000,    // VNĐ/giờ
 }
 
-export const parkingSessions: ParkingSession[] = [
-  // Dữ liệu mẫu — khớp với slots đã gán userId ở trên
-  {
-    id: "PS001",
-    userId: "SV001",
-    slotId: "A02",
-    entryTime: "2025-04-30T07:45:00",
-    exitTime: null,
-    status: "active",
-  },
-  {
-    id: "PS002",
-    userId: "GV001",
-    slotId: "B03",
-    entryTime: "2025-04-30T08:10:00",
-    exitTime: null,
-    status: "active",
-  },
-]
+export const parkingSessions: ParkingSession[] = []
 
 export const systemSettings = {
   pricing: {
     student:  2000,   // VNĐ/lượt
-    lecturer: 0,       // miễn phí
-    staff:    0,       // miễn phí
-    visitor:  5000,    // VNĐ/lượt
-  },
-  parking: {
-    nearFullThreshold: 80,   // % → hiển thị "Gần đầy"
-    totalSlots: {
-      A: 5,
-      B: 5,
-      C: 5,
-    },
+    lecturer: 0,      // miễn phí (cấu hình được)
+    staff:    0,      // miễn phí (cấu hình được)
+    visitor:  5000,   // VNĐ/lượt — thu ngay khi ra
   },
   billing: {
-    cycleDays: 30,    // chu kỳ tính phí
-    dueDays:   7,     // số ngày được phép thanh toán trễ
+    cycleDays: 30,    // chu kỳ tính hóa đơn (ngày)
+    dueDays:   7,
+  },
+  parking: {
+    nearFullThreshold: 80,  // % → "Gần đầy"
   },
   bkpay: {
     simulateMode: "success" as BKPayMode,
     delayMs: 1500,
   },
 }
+
+export type SubZone = {
+  id:       string    // "A1", "B2", "C3"...
+  zone:     "A" | "B" | "C" | "D"
+  forRole:  "staff_lecturer" | "student_visitor"
+  capacity: number    // tổng số slot
+  occupied: number    // số slot đang có xe
+}
+
+export const subZones: SubZone[] = [
+  // Khu A — GV/CB
+  { id: "A1", zone: "A", forRole: "staff_lecturer", capacity: 100, occupied: 12 },
+  { id: "A2", zone: "A", forRole: "staff_lecturer", capacity: 100, occupied: 8  },
+  { id: "A3", zone: "A", forRole: "staff_lecturer", capacity: 100, occupied: 5  },
+  // Khu B — SV/Khách
+  { id: "B1", zone: "B", forRole: "student_visitor", capacity: 100, occupied: 45 },
+  { id: "B2", zone: "B", forRole: "student_visitor", capacity: 100, occupied: 78 },
+  { id: "B3", zone: "B", forRole: "student_visitor", capacity: 100, occupied: 90 },
+  // Khu C — SV/Khách
+  { id: "C1", zone: "C", forRole: "student_visitor", capacity: 100, occupied: 30 },
+  { id: "C2", zone: "C", forRole: "student_visitor", capacity: 100, occupied: 55 },
+  { id: "C3", zone: "C", forRole: "student_visitor", capacity: 100, occupied: 20 },
+  // Khu D — SV/Khách
+  { id: "D1", zone: "D", forRole: "student_visitor", capacity: 100, occupied: 60 },
+  { id: "D2", zone: "D", forRole: "student_visitor", capacity: 100, occupied: 40 },
+  { id: "D3", zone: "D", forRole: "student_visitor", capacity: 100, occupied: 15 },
+]

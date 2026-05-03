@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentUser, logout } from "@/lib/auth"
-import { fetchSlots } from "@/lib/api"
+import { fetchSubZones } from "@/lib/api"
 import { User } from "@/data/mock"
 import Navbar from "@/components/Navbar"
 
@@ -19,8 +19,8 @@ export default function OperatorDashboard() {
     }
     setUser(u)
 
-    fetchSlots().then(data => {
-      setSlots(data.slots)
+    fetchSubZones().then(data => {
+      setSlots(data.subZones)    // field đổi từ slots → subZones
       setLoading(false)
     })
   }, [])
@@ -50,6 +50,8 @@ export default function OperatorDashboard() {
   const menuItems = [
     { icon: "🎫", title: "Phát vé tạm thời", sub: "Khách vãng lai",
       href: "/ticket/new",  color: "bg-amber-50"  },
+    { icon: "📋", title: "Danh sách vé",     sub: "Xem & thu phí",   // thêm dòng này
+    href: "/ticket/list", color: "bg-blue-50"   },
     { icon: "🗺️", title: "Bản đồ bãi xe",   sub: "Xem chi tiết",
       href: "/parking",     color: "bg-blue-50"   },
     ...(user.role === "admin" ? [

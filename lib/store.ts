@@ -1,97 +1,134 @@
-// lib/store.ts
 import {
-  parkingSlots   as initialSlots,
+  subZones        as initialSubZones,
   parkingSessions as initialSessions,
-  invoices       as initialInvoices,
-  tickets        as initialTickets,
-  reviews        as initialReviews,
-  systemSettings as initialSettings,
-  type ParkingSlot,
+  invoices        as initialInvoices,
+  tickets         as initialTickets,
+  reviews         as initialReviews,
+  systemSettings  as initialSettings,
+  type SubZone,
   type ParkingSession,
   type Invoice,
-  type Ticket,
-  type Review,
 } from "@/data/mock"
 
-// Deep clone để tránh mutate file gốc
 function clone<T>(data: T): T {
   return JSON.parse(JSON.stringify(data))
 }
 
-// State sống trong module-level variable trên server
-// Next.js giữ module này trong RAM suốt vòng đời server process
-let slots:    ParkingSlot[]   = clone(initialSlots)
+let zones:    SubZone[]        = clone(initialSubZones)
 let sessions: ParkingSession[] = clone(initialSessions)
-let invs:     Invoice[]       = clone(initialInvoices)
-let tcks:     Ticket[]        = clone(initialTickets)
-let revs:     Review[]        = clone(initialReviews)
-let settings                  = clone(initialSettings)
+let invs:     Invoice[]        = clone(initialInvoices)
+let tcks:     any[]            = clone(initialTickets)
+let revs:     any[]            = clone(initialReviews)
+let settings                   = clone(initialSettings)
 
-// ── Getters ──────────────────────────────────────────
-export function getSlots()    { return slots    }
-export function getSessions() { return sessions }
-export function getInvoices() { return invs     }
-export function getTickets()  { return tcks     }
-export function getReviews()  { return revs     }
-export function getSettings() { return settings }
+// ── Getters ───────────────────────────────────────────────────────────────────
+export function getSubZones()  { return zones    }
+export function getSessions()  { return sessions }
+export function getInvoices()  { return invs     }
+export function getTickets()   { return tcks     }
+export function getReviews()   { return revs     }
+export function getSettings()  { return settings }
 
-// ── Parking logic ─────────────────────────────────────
-export function assignSlot(userId: string): string | null {
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function pickSubZone(role: string): SubZone | null {
+  const forRole = (role === "lecturer" || role === "staff")
+    ? "staff_lecturer"
+    : "student_visitor"
+
+  const available = zones
+    .filter(z => z.forRole === forRole && z.occupied < z.capacity)
+    .sort((a, b) => a.occupied - b.occupied)
+
+  return available[0] ?? null
+}
+
+export function calcFeePerTrip(role: string): number {
+  switch (role) {
+    case "student":  return settings.pricing.student
+    case "lecturer": return settings.pricing.lecturer
+    case "staff":    return settings.pricing.staff
+    default:         return settings.pricing.student
+  }
+}
+
+// ── Parking — thành viên trường ───────────────────────────────────────────────
+export function checkin(userId: string, role: string): string | null {
   const existing = sessions.find(
     s => s.userId === userId && s.status === "active"
   )
-  if (existing) return existing.slotId
+  if (existing) return existing.subZoneId
 
-  const slot = slots
-    .filter(s => s.status === "available")
-    .sort((a, b) => a.id.localeCompare(b.id))[0]
+  const subZone = pickSubZone(role)
+  if (!subZone) return null
 
-  if (!slot) return null
-
-  slot.status = "occupied"
-  slot.userId = userId
+  subZone.occupied += 1
 
   sessions.push({
     id:        "PS" + Date.now().toString().slice(-6),
     userId,
-    slotId:    slot.id,
+    subZoneId: subZone.id,
     entryTime: new Date().toISOString(),
     exitTime:  null,
     status:    "active",
+    fee:       null,
   })
 
-  return slot.id
+  return subZone.id
 }
 
-export function getCurrentSlot(userId: string): string | null {
-  return sessions.find(
-    s => s.userId === userId && s.status === "active"
-  )?.slotId ?? null
-}
-
-export function closeSession(sessionId: string): number | null {
+export function checkout(userId: string, role: string): number | null {
   const session = sessions.find(
-    s => s.id === sessionId && s.status === "active"
+    s => s.userId === userId && s.status === "active"
   )
   if (!session) return null
 
-  const slot = slots.find(s => s.id === session.slotId)
-  if (slot) {
-    slot.status = "available"
-    slot.userId = null
-  }
+  const subZone = zones.find(z => z.id === session.subZoneId)
+  if (subZone) subZone.occupied = Math.max(0, subZone.occupied - 1)
+
+  const fee = calcFeePerTrip(role)
 
   session.exitTime = new Date().toISOString()
   session.status   = "closed"
+  session.fee      = fee
 
-  const hours = Math.max(1, Math.ceil(
-    (new Date(session.exitTime).getTime() -
-     new Date(session.entryTime).getTime()) / 3600000
-  ))
-  return hours
+  return fee
 }
 
-// ── Invoice logic ─────────────────────────────────────
+export function getCurrentSubZone(userId: string): string | null {
+  return sessions.find(
+    s => s.userId === userId && s.status === "active"
+  )?.subZoneId ?? null
+}
+
+// ── Invoice — tính cuối kỳ ────────────────────────────────────────────────────
+export function calcMonthlyInvoice(
+  userId: string,
+  role: string,
+  periodStart: string,
+  periodEnd: string
+): number {
+  const trips = sessions.filter(s =>
+    s.userId    === userId &&
+    s.status    === "closed" &&
+    s.entryTime >= periodStart &&
+    s.entryTime <= periodEnd
+  )
+  return trips.length * calcFeePerTrip(role)
+}
+
+export function countTripsInPeriod(
+  userId: string,
+  periodStart: string,
+  periodEnd: string
+): number {
+  return sessions.filter(s =>
+    s.userId    === userId &&
+    s.status    === "closed" &&
+    s.entryTime >= periodStart &&
+    s.entryTime <= periodEnd
+  ).length
+}
+
 export function updateInvoiceStatus(
   invoiceId: string,
   status: "paid" | "pending",
@@ -104,44 +141,56 @@ export function updateInvoiceStatus(
   return true
 }
 
-// ── Ticket logic ──────────────────────────────────────
-export function createTicket(licensePlate: string, guestName?: string) {
-  const slotId = assignSlot("GUEST-" + Date.now().toString().slice(-6))
-  if (!slotId) return null
+// ── Khách vãng lai ────────────────────────────────────────────────────────────
+export function createGuestTicket(
+  licensePlate: string,
+  guestName?: string
+) {
+  const subZone = pickSubZone("student")   // khách → khu SV/Khách
+  if (!subZone) return null
+
+  subZone.occupied += 1
 
   const ticket = {
     id:           "TK" + Date.now().toString().slice(-6),
     licensePlate: licensePlate.toUpperCase(),
     guestName:    guestName ?? null,
-    slotId,
+    subZoneId:    subZone.id,
     entryTime:    new Date().toISOString(),
-    exitTime:     null,
+    exitTime:     null as string | null,
     status:       "active" as const,
     fee:          null as number | null,
   }
-  tcks.push(ticket as any)
+  tcks.push(ticket)
   return ticket
 }
 
-export function checkoutTicket(ticketId: string): number | null {
-  const ticket = tcks.find(t => t.id === ticketId) as any
+// Dùng khi nhấn "Thu phí" trực tiếp từ list (biết ticketId)
+export function checkoutGuestTicket(ticketId: string): number | null {
+  const ticket = tcks.find(t => t.id === ticketId)
   if (!ticket || ticket.status === "closed") return null
 
-  // Đóng session của ticket này
-  const session = sessions.find(
-    s => s.slotId === ticket.slotId && s.status === "active"
-  )
-  const hours = session ? closeSession(session.id) : 1
-  const fee   = (hours ?? 1) * settings.pricing.visitor
+  const subZone = zones.find(z => z.id === ticket.subZoneId)
+  if (subZone) subZone.occupied = Math.max(0, subZone.occupied - 1)
 
   ticket.exitTime = new Date().toISOString()
   ticket.status   = "closed"
-  ticket.fee      = fee
+  ticket.fee      = settings.pricing.visitor   // 5000đ/lượt, thu ngay
 
-  return fee
+  return ticket.fee
 }
 
-// ── Review logic ──────────────────────────────────────
+// Dùng khi tra cứu bằng mã vé hoặc biển số (trang checkout thủ công)
+export function lookupActiveTicket(query: string) {
+  return tcks.find(t =>
+    t.status === "active" && (
+      t.id           === query.trim() ||
+      t.licensePlate === query.trim().toUpperCase()
+    )
+  ) ?? null
+}
+
+// ── Review ────────────────────────────────────────────────────────────────────
 export function addReview(
   userId: string | null,
   stars: number,
@@ -156,10 +205,10 @@ export function addReview(
   })
 }
 
-// ── Settings logic ────────────────────────────────────
-export function updateSettings(patch: Partial<typeof settings>) {
-  Object.assign(settings, patch)
+// ── Settings ──────────────────────────────────────────────────────────────────
+export function updateSettings(patch: any) {
   if (patch.pricing) Object.assign(settings.pricing, patch.pricing)
   if (patch.parking) Object.assign(settings.parking, patch.parking)
   if (patch.bkpay)   Object.assign(settings.bkpay,   patch.bkpay)
+  if (patch.billing) Object.assign(settings.billing,  patch.billing)
 }

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
-import { fetchInvoices, fetchSlots } from "@/lib/api"
+import { fetchInvoices, fetchSubZones } from "@/lib/api"
 import { User } from "@/data/mock"
 import Navbar from "@/components/Navbar"
 
@@ -23,12 +23,12 @@ export default function StudentDashboard() {
     const userId = u.id   // lưu vào biến trước
 
     async function load() {
-      const [invData, slotData] = await Promise.all([
-        fetchInvoices(userId),   // dùng biến thay vì u.id
-        fetchSlots(userId),
+      const [invData, zoneData] = await Promise.all([
+        fetchInvoices(userId),
+        fetchSubZones(userId),
       ])
       setInvoices(invData.invoices)
-      setCurrentSlot(slotData.currentSlot)
+      setCurrentSlot(zoneData.currentSubZone)
       setLoading(false)
     }
     load()
