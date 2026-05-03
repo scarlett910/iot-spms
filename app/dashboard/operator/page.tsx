@@ -54,6 +54,8 @@ export default function OperatorDashboard() {
     href: "/ticket/list", color: "bg-blue-50"   },
     { icon: "🗺️", title: "Bản đồ bãi xe",   sub: "Xem chi tiết",
       href: "/parking",     color: "bg-blue-50"   },
+    { icon: "📷", title: "Quét QR",          sub: "Check-in / Check-out",  // ← THÊM
+        href: "/scan",        color: "bg-teal-50"   },
     ...(user.role === "admin" ? [
       { icon: "📊", title: "Báo cáo",           sub: "Thống kê & xuất PDF",
         href: "/report",          color: "bg-green-50"  },

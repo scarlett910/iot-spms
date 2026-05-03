@@ -104,7 +104,7 @@ export default function NewTicketPage() {
                 <p className="text-xs text-gray-400 mb-1">
                   Khu vực:{" "}
                   <span className="font-medium text-[#185FA5]">
-                    {ticket?.slotId}
+                    {ticket?.subZoneId}
                   </span>
                 </p>
                 <p className="text-xs text-gray-300 mb-5">Cổng đang mở</p>

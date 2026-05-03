@@ -2,27 +2,33 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
-import { invoices, User } from "@/data/mock"
+import { fetchInvoices } from "@/lib/api"
+import { User } from "@/data/mock"
 import Navbar from "@/components/Navbar"
 
 export default function HistoryPage() {
   const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
-  const [from, setFrom] = useState("")
-  const [to,   setTo]   = useState("")
-  const [error, setError] = useState("")
+  const [user,        setUser]        = useState<User | null>(null)
+  const [allInvoices, setAllInvoices] = useState<any[]>([])
+  const [from,        setFrom]        = useState("")
+  const [to,          setTo]          = useState("")
+  const [error,       setError]       = useState("")
 
   useEffect(() => {
     const u = getCurrentUser()
     if (!u) { router.push("/login"); return }
+    if (["operator","admin"].includes(u.role)) {
+      router.push("/dashboard/operator"); return
+    }
     setUser(u)
+
+    const userId = u.id
+    fetchInvoices(userId).then(data => setAllInvoices(data.invoices))
   }, [])
 
   if (!user) return null
 
-  const all = invoices.filter(i => i.userId === user.id)
-
-  const filtered = all.filter(i => {
+  const filtered = allInvoices.filter(i => {
     if (from && i.createdAt < from) return false
     if (to   && i.createdAt > to)   return false
     return true
@@ -36,14 +42,14 @@ export default function HistoryPage() {
     setError("")
   }
 
-  const statusStyle = {
-    pending: { label: "Chờ TT",    cls: "bg-amber-50 text-amber-700" },
-    paid:    { label: "Đã thanh toán", cls: "bg-green-50 text-green-700"  },
+  const statusStyle: Record<string, { label: string; cls: string }> = {
+    pending: { label: "Chờ TT",         cls: "bg-amber-50 text-amber-700" },
+    paid:    { label: "Đã thanh toán",  cls: "bg-green-50 text-green-700" },
   }
 
   const totalPaid = filtered
-    .filter(i => i.status === "paid")
-    .reduce((s, i) => s + i.amount, 0)
+    .filter((i: any) => i.status === "paid")
+    .reduce((s: number, i: any) => s + i.amount, 0)
 
   return (
     <div className="min-h-screen bg-gray-50 py-6 px-4">
@@ -61,9 +67,7 @@ export default function HistoryPage() {
               ← Hóa đơn
             </button>
 
-            <p className="font-medium text-gray-900 mb-4">
-              Lịch sử thanh toán
-            </p>
+            <p className="font-medium text-gray-900 mb-4">Lịch sử thanh toán</p>
 
             {/* Date filter */}
             <div className="flex gap-2 mb-2">
@@ -92,8 +96,8 @@ export default function HistoryPage() {
             </div>
 
             {error && (
-              <p className="text-red-500 text-xs mb-2 bg-red-50 px-3 py-2
-                            rounded-lg">
+              <p className="text-red-500 text-xs mb-2 bg-red-50
+                            px-3 py-2 rounded-lg">
                 {error}
               </p>
             )}
@@ -129,23 +133,20 @@ export default function HistoryPage() {
             {filtered.length === 0 ? (
               <div className="text-center py-8">
                 <p className="text-gray-300 text-3xl mb-2">🔍</p>
-                <p className="text-sm text-gray-400">
-                  Chưa có giao dịch nào
-                </p>
+                <p className="text-sm text-gray-400">Chưa có giao dịch nào</p>
               </div>
             ) : (
               <div className="flex flex-col gap-2">
-                {filtered.map(inv => {
-                  const s = statusStyle[inv.status]
+                {filtered.map((inv: any) => {
+                  const s = statusStyle[inv.status] ?? statusStyle.pending
                   return (
                     <div key={inv.id}
                          className="flex justify-between items-center
-                                    px-4 py-3 border border-gray-100
-                                    rounded-xl">
+                                    px-4 py-3 border border-gray-100 rounded-xl">
                       <div>
                         <p className="text-sm font-medium text-gray-800">
-                          Tháng {inv.period.split("-")[1]}/
-                          {inv.period.split("-")[0]}
+                          Tháng {inv.period?.split("-")[1]}/
+                          {inv.period?.split("-")[0]}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {inv.createdAt}
@@ -153,7 +154,7 @@ export default function HistoryPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-medium text-gray-900">
-                          {inv.amount.toLocaleString("vi-VN")}đ
+                          {inv.amount?.toLocaleString("vi-VN")}đ
                         </p>
                         <span className={`text-xs px-2 py-0.5 rounded-full
                                           font-medium ${s.cls}`}>

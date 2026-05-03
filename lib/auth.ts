@@ -1,4 +1,11 @@
-import { User } from "@/data/mock"
+import { User, users } from "@/data/mock"
+
+export function login(id: string, password: string): User | null {
+  const u = users.find(u => u.id === id && u.password === password)
+  if (!u) return null
+  sessionStorage.setItem("currentUser", JSON.stringify(u))
+  return u
+}
 
 export function getCurrentUser(): User | null {
   if (typeof window === "undefined") return null

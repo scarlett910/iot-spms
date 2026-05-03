@@ -118,7 +118,7 @@ export default function TicketListPage() {
                           {t.licensePlate}
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">
-                          {t.id} · Khu {t.slotId}
+                          {t.id} · Khu {t.subZoneId}
                         </p>
                         <p className="text-xs text-gray-400">
                           Vào: {new Date(t.entryTime).toLocaleTimeString("vi-VN")}
@@ -196,7 +196,7 @@ export default function TicketListPage() {
                         {t.exitTime
                           ? new Date(t.exitTime).toLocaleTimeString("vi-VN")
                           : "—"}
-                        {" · Khu "}{t.slotId}
+                        {" · Khu "}{t.subZoneId}
                       </p>
                     </div>
                     <div className="text-right shrink-0">

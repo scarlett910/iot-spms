@@ -2,25 +2,41 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
-import { invoices, tickets, parkingSlots } from "@/data/mock"
 import Navbar from "@/components/Navbar"
 
 export default function ReportPage() {
   const router = useRouter()
   const [type, setType]     = useState("summary")
   const [generated, setGen] = useState(false)
+  const [reportData, setReportData] = useState({
+  totalRevenue: 0,
+  totalTickets: 0,
+  activeTickets: 0,
+  errorSlots: 0,
+})
 
   useEffect(() => {
     const u = getCurrentUser()
     if (!u || u.role !== "admin") { router.push("/login"); return }
+
+    // Load data từ API
+    Promise.all([
+      fetch("/api/invoices").then(r => r.json()),
+      fetch("/api/tickets").then(r => r.json()),
+      fetch("/api/slots").then(r => r.json()),
+    ]).then(([invData, tckData, slotData]) => {
+      setReportData({
+        totalRevenue:  invData.invoices
+          .filter((i: any) => i.status === "paid")
+          .reduce((s: number, i: any) => s + i.amount, 0),
+        totalTickets:  tckData.tickets.length,
+        activeTickets: tckData.tickets.filter((t: any) => t.status === "active").length,
+        errorSlots: 0,   // subZones không có status "error" — luôn là 0
+      })
+    })
   }, [])
 
-  const totalRevenue = invoices
-    .filter(i => i.status === "paid")
-    .reduce((s,i) => s + i.amount, 0)
-  const totalTickets  = tickets.length
-  const activeTickets = tickets.filter(t => t.status === "active").length
-  const errorSlots    = parkingSlots.filter(s => s.status === "error").length
+  const { totalRevenue, totalTickets, activeTickets, errorSlots } = reportData
 
   const reportTypes = [
     { id: "summary",  label: "Báo cáo tổng hợp"  },

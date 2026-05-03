@@ -105,7 +105,7 @@ export default function CheckoutPage() {
                       {[
                         ["Mã vé",   found.id],
                         ["Biển số", found.licensePlate],
-                        ["Khu vực", found.slotId],
+                        ["Khu vực", found.subZoneId],
                         ["Giờ vào", new Date(found.entryTime)
                           .toLocaleTimeString("vi-VN")],
                       ].map(([l, v], i, arr) => (
