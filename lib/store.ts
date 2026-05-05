@@ -1,4 +1,3 @@
-// lib/store.ts
 import {
   subZones        as initialSubZones,
   parkingSessions as initialSessions,
@@ -25,12 +24,12 @@ let revs:     Review[]         = clone(initialReviews)
 let settings                   = clone(initialSettings)
 
 // ── Getters ──────────────────────────────────────────────
-export const getSubZones  = () => zones
-export const getSessions  = () => sessions
-export const getInvoices  = () => invs
-export const getTickets   = () => tcks
-export const getReviews   = () => revs
-export const getSettings  = () => settings
+export const getSubZones = () => zones
+export const getSessions = () => sessions
+export const getInvoices = () => invs
+export const getTickets  = () => tcks
+export const getReviews  = () => revs
+export const getSettings = () => settings
 
 // ── Helpers ──────────────────────────────────────────────
 function pickSubZone(role: string): SubZone | null {
@@ -41,11 +40,12 @@ function pickSubZone(role: string): SubZone | null {
     .sort((a, b) => a.occupied - b.occupied)[0] ?? null
 }
 
+// Chỉ khai báo 1 lần — GV/CB miễn phí, SV 2000đ/lượt
 export function calcFeePerTrip(role: string): number {
   const p = settings.pricing
-  if (role === "lecturer") return p.lecturer
-  if (role === "staff")    return p.staff
-  return p.student
+  if (role === "lecturer") return p.lecturer  // 0
+  if (role === "staff")    return p.staff     // 0
+  return p.student                            // 2000
 }
 
 // ── Parking — thành viên trường ──────────────────────────
@@ -80,15 +80,17 @@ export function checkout(userId: string, role: string): number | null {
   const subZone = zones.find(z => z.id === session.subZoneId)
   if (subZone) subZone.occupied = Math.max(0, subZone.occupied - 1)
 
-  const fee = calcFeePerTrip(role)
+  // GV/CB → 0, SV → 2000 (1 checkin+checkout = 1 lượt hoàn tất)
+  const fee        = calcFeePerTrip(role)
   session.exitTime = new Date().toISOString()
   session.status   = "closed"
   session.fee      = fee
   return fee
 }
 
-// Dùng bởi /api/sessions/close (đóng session theo sessionId)
-export function closeSession(sessionId: string): number | null {
+// Đóng session theo sessionId — dùng bởi /api/sessions/close
+// Cần truyền role để tính fee đúng
+export function closeSession(sessionId: string, role = "student"): number | null {
   const session = sessions.find(
     s => s.id === sessionId && s.status === "active"
   )
@@ -97,10 +99,11 @@ export function closeSession(sessionId: string): number | null {
   const subZone = zones.find(z => z.id === session.subZoneId)
   if (subZone) subZone.occupied = Math.max(0, subZone.occupied - 1)
 
+  const fee        = calcFeePerTrip(role)
   session.exitTime = new Date().toISOString()
   session.status   = "closed"
-  session.fee      = 0   // ra bãi tự do — phí tính riêng qua invoice
-  return session.fee
+  session.fee      = fee
+  return fee
 }
 
 export function getCurrentSubZone(userId: string): string | null {
@@ -109,7 +112,41 @@ export function getCurrentSubZone(userId: string): string | null {
   )?.subZoneId ?? null
 }
 
-// ── Invoice ──────────────────────────────────────────────
+// ── Invoice — chỉ dành cho SV ────────────────────────────
+export function generateMonthlyInvoice(userId: string): Invoice | null {
+  const now    = new Date()
+  const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`
+
+  // Đếm lượt hoàn tất trong tháng (closed + có exitTime trong tháng)
+  const completedTrips = sessions.filter(s =>
+    s.userId  === userId   &&
+    s.status  === "closed" &&
+    s.exitTime?.startsWith(period)
+  )
+
+  const tripCount = completedTrips.length
+  const amount    = tripCount * settings.pricing.student  // 2000 × số lượt
+
+  // Cập nhật nếu đã có invoice tháng này
+  const existing = invs.find(i => i.userId === userId && i.period === period)
+  if (existing) {
+    existing.amount = amount
+    return existing
+  }
+
+  // Tạo mới
+  const invoice: Invoice = {
+    id:        "INV" + Date.now().toString().slice(-6),
+    userId,
+    amount,
+    status:    "pending",
+    period,
+    createdAt: now.toISOString(),
+  }
+  invs.push(invoice)
+  return invoice
+}
+
 export function updateInvoiceStatus(
   invoiceId: string,
   status: "paid" | "pending",
@@ -152,7 +189,7 @@ export function checkoutGuestTicket(ticketId: string): number | null {
   const subZone = zones.find(z => z.id === ticket.subZoneId)
   if (subZone) subZone.occupied = Math.max(0, subZone.occupied - 1)
 
-  const fee = settings.pricing.visitor
+  const fee       = settings.pricing.visitor  // 5000
   ticket.exitTime = new Date().toISOString()
   ticket.status   = "closed"
   ticket.fee      = fee
