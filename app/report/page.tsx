@@ -2,170 +2,113 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
-import Navbar from "@/components/Navbar"
+import { User } from "@/data/mock"
+import OperatorLayout from "@/components/OperatorLayout"
 
 export default function ReportPage() {
   const router = useRouter()
-  const [type, setType]     = useState("summary")
-  const [generated, setGen] = useState(false)
-  const [reportData, setReportData] = useState({
-  totalRevenue: 0,
-  totalTickets: 0,
-  activeTickets: 0,
-  errorSlots: 0,
-})
+  const [user,      setUser]      = useState<User | null>(null)
+  const [type,      setType]      = useState("summary")
+  const [generated, setGen]       = useState(false)
+  const [reportData, setReportData] = useState({ totalRevenue:0, totalTickets:0, activeTickets:0 })
 
   useEffect(() => {
     const u = getCurrentUser()
     if (!u || u.role !== "admin") { router.push("/login"); return }
-
-    // Load data từ API
+    setUser(u)
     Promise.all([
       fetch("/api/invoices").then(r => r.json()),
       fetch("/api/tickets").then(r => r.json()),
-      fetch("/api/slots").then(r => r.json()),
-    ]).then(([invData, tckData, slotData]) => {
+    ]).then(([invData, tckData]) => {
       setReportData({
-        totalRevenue:  invData.invoices
-          .filter((i: any) => i.status === "paid")
-          .reduce((s: number, i: any) => s + i.amount, 0),
+        totalRevenue:  invData.invoices.filter((i:any) => i.status==="paid").reduce((s:number,i:any) => s+i.amount, 0),
         totalTickets:  tckData.tickets.length,
-        activeTickets: tckData.tickets.filter((t: any) => t.status === "active").length,
-        errorSlots: 0,   // subZones không có status "error" — luôn là 0
+        activeTickets: tckData.tickets.filter((t:any) => t.status==="active").length,
       })
     })
   }, [])
 
-  const { totalRevenue, totalTickets, activeTickets, errorSlots } = reportData
+  if (!user) return null
+
+  const { totalRevenue, totalTickets, activeTickets } = reportData
 
   const reportTypes = [
-    { id: "summary",  label: "Báo cáo tổng hợp"  },
-    { id: "revenue",  label: "Báo cáo doanh thu"  },
-    { id: "traffic",  label: "Báo cáo lưu lượng"  },
-    { id: "device",   label: "Báo cáo thiết bị"   },
+    { id:"summary", label:"Báo cáo tổng hợp" },
+    { id:"revenue", label:"Báo cáo doanh thu" },
+    { id:"traffic", label:"Báo cáo lưu lượng" },
+    { id:"device",  label:"Báo cáo thiết bị"  },
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4">
-      <div className="max-w-sm mx-auto">
-        <div className="rounded-2xl overflow-hidden border border-gray-200
-                        shadow-sm">
-          <Navbar title="IoT-SPMS · Quản trị" />
-          <div className="bg-white p-5">
+    <OperatorLayout user={user} activePage="Báo cáo" backHref="/dashboard/operator" title="Tạo báo cáo">
+      <div style={{ maxWidth:500 }}>
 
-            <button
-              onClick={() => router.push("/dashboard/operator")}
-              className="flex items-center gap-1 text-xs text-gray-400
-                         mb-4 hover:text-gray-600"
-            >
-              ← Dashboard
+        <p style={{ fontSize:12, color:"#868686", marginBottom:12 }}>Loại báo cáo</p>
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+          {reportTypes.map(r => (
+            <button key={r.id} onClick={() => { setType(r.id); setGen(false) }} style={{
+              display:"flex", justifyContent:"space-between", alignItems:"center",
+              padding:"12px 16px", borderRadius:12, border:`1px solid ${type===r.id?"#185FA5":"#e2e8f0"}`,
+              background:type===r.id?"#EFF6FF":"white",
+              color:type===r.id?"#185FA5":"#374151",
+              fontSize:14, fontWeight:500, cursor:"pointer", fontFamily:"'Inter',sans-serif",
+              transition:"all 0.15s",
+            }}>
+              {r.label}
+              {type===r.id && (
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <path d="M3 8l4 4 6-7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
             </button>
-
-            <p className="font-medium text-gray-900 mb-5">Tạo báo cáo</p>
-
-            {/* Type */}
-            <p className="text-xs text-gray-500 mb-2">Loại báo cáo</p>
-            <div className="flex flex-col gap-1.5 mb-4">
-              {reportTypes.map(r => (
-                <button
-                  key={r.id}
-                  onClick={() => { setType(r.id); setGen(false) }}
-                  className={`flex items-center justify-between px-4 py-3
-                    rounded-xl border text-sm transition-all ${
-                    type === r.id
-                      ? "border-[#185FA5] bg-blue-50 text-[#185FA5]"
-                      : "border-gray-100 text-gray-700 hover:border-gray-200"
-                  }`}
-                >
-                  {r.label}
-                  {type === r.id && (
-                    <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none">
-                      <path d="M3 8l4 4 6-7" stroke="currentColor"
-                            strokeWidth="1.5" strokeLinecap="round"
-                            strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => setGen(true)}
-              className="w-full bg-[#185FA5] hover:bg-[#0C447C]
-                         text-[#E6F1FB] font-medium py-3 rounded-xl
-                         text-sm transition-colors mb-5"
-            >
-              Tạo báo cáo
-            </button>
-
-            {/* Preview */}
-            {generated && (
-              <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="bg-gray-50 px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-medium text-gray-800">
-                    {reportTypes.find(r => r.id === type)?.label}
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    {new Date().toLocaleDateString("vi-VN")}
-                  </p>
-                </div>
-
-                <div className="p-4 flex flex-col gap-3">
-                  {(type === "summary" || type === "revenue") && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Tổng doanh thu</span>
-                      <span className="font-medium text-gray-900">
-                        {totalRevenue.toLocaleString("vi-VN")}đ
-                      </span>
-                    </div>
-                  )}
-                  {(type === "summary" || type === "traffic") && (
-                    <>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Tổng lượt gửi xe</span>
-                        <span className="font-medium text-gray-900">
-                          {totalTickets}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-400">Đang gửi xe</span>
-                        <span className="font-medium text-amber-600">
-                          {activeTickets}
-                        </span>
-                      </div>
-                    </>
-                  )}
-                  {(type === "summary" || type === "device") && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-400">Cảm biến lỗi</span>
-                      <span className={`font-medium ${
-                        errorSlots > 0 ? "text-red-600" : "text-green-700"
-                      }`}>
-                        {errorSlots}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="px-4 pb-4">
-                  <button
-                    onClick={() => alert(
-                      "Mock: Xuất PDF thành công!\n" +
-                      "File: bao-cao-" + type + "-" +
-                      new Date().toISOString().slice(0,10) + ".pdf"
-                    )}
-                    className="w-full border border-[#185FA5]/40
-                               text-[#185FA5] text-sm py-2.5 rounded-xl
-                               hover:bg-blue-50 transition-colors"
-                  >
-                    Tải về PDF (Mock)
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          ))}
         </div>
+
+        <button onClick={() => setGen(true)} style={{
+          width:"100%", height:44, background:"#003289", color:"white", border:"none",
+          borderRadius:12, fontSize:15, fontWeight:600, cursor:"pointer",
+          fontFamily:"'Inter',sans-serif", marginBottom:20,
+        }}
+          onMouseEnter={e => (e.currentTarget.style.opacity="0.88")}
+          onMouseLeave={e => (e.currentTarget.style.opacity="1")}>
+          Tạo báo cáo
+        </button>
+
+        {generated && (
+          <div style={{ background:"white", borderRadius:12, border:"1px solid #e2e8f0", overflow:"hidden", boxShadow:"0 2px 4px rgba(0,0,0,0.08)" }}>
+            <div style={{ background:"#F8FAFC", padding:"12px 16px", borderBottom:"1px solid #e2e8f0" }}>
+              <p style={{ fontWeight:600, fontSize:14, color:"#000" }}>{reportTypes.find(r => r.id===type)?.label}</p>
+              <p style={{ fontSize:12, color:"#868686", marginTop:2 }}>{new Date().toLocaleDateString("vi-VN")}</p>
+            </div>
+            <div style={{ padding:16, display:"flex", flexDirection:"column", gap:12 }}>
+              {(type==="summary"||type==="revenue") && (
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:13, color:"#868686" }}>Tổng doanh thu</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:"#000" }}>{totalRevenue.toLocaleString("vi-VN")}đ</span>
+                </div>
+              )}
+              {(type==="summary"||type==="traffic") && (
+                <>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                    <span style={{ fontSize:13, color:"#868686" }}>Tổng lượt gửi xe</span>
+                    <span style={{ fontSize:13, fontWeight:600, color:"#000" }}>{totalTickets}</span>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between" }}>
+                    <span style={{ fontSize:13, color:"#868686" }}>Đang gửi xe</span>
+                    <span style={{ fontSize:13, fontWeight:600, color:"#d97706" }}>{activeTickets}</span>
+                  </div>
+                </>
+              )}
+            </div>
+            <div style={{ padding:"0 16px 16px" }}>
+              <button onClick={() => alert("Mock: Xuất PDF thành công!\nFile: bao-cao-"+type+"-"+new Date().toISOString().slice(0,10)+".pdf")}
+                style={{ width:"100%", height:40, background:"transparent", border:"1px solid #185FA5", color:"#185FA5", borderRadius:10, fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"'Inter',sans-serif" }}>
+                Tải về PDF (Mock)
+              </button>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+    </OperatorLayout>
   )
 }

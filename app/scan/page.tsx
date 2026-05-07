@@ -2,38 +2,44 @@
 import { useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getCurrentUser } from "@/lib/auth"
-import Navbar from "@/components/Navbar"
+import OperatorLayout from "@/components/OperatorLayout"
 
 type ScanResult = {
-  action:    "checkin" | "checkout"
-  userName:  string
-  role:      string
-  subZoneId: string
-  fee?:      number | null
-  time:      string
+  action:       "checkin" | "checkout"
+  type:         "member" | "guest"
+  // member fields
+  userId?:      string
+  userName?:    string
+  role?:        string
+  // guest fields
+  ticketId?:    string
+  licensePlate?: string
+  // common
+  subZoneId:    string
+  fee?:         number | null
+  time:         string
 }
 
 export default function ScanPage() {
   const router  = useRouter()
   const scanRef = useRef<any>(null)
-  const [scanning, setScanning] = useState(false)
-  const [result,   setResult]   = useState<ScanResult | null>(null)
-  const [error,    setError]    = useState("")
-  const [loading,  setLoading]  = useState(false)
-  // desktop dùng "environment" có thể fail → fallback "user"
+  const [user,       setUser]       = useState<any>(null)
+  const [scanning,   setScanning]   = useState(false)
+  const [result,     setResult]     = useState<ScanResult | null>(null)
+  const [error,      setError]      = useState("")
+  const [loading,    setLoading]    = useState(false)
   const [facingMode, setFacingMode] = useState<"environment"|"user">("environment")
 
   useEffect(() => {
     const u = getCurrentUser()
     if (!u || !["operator","admin"].includes(u.role)) {
-      router.push("/login")
+      router.push("/login"); return
     }
+    setUser(u)
   }, [])
 
   async function startScan() {
-    setError("")
-    setResult(null)
-
+    setError(""); setResult(null)
     const { Html5Qrcode } = await import("html5-qrcode")
     const qr = new Html5Qrcode("qr-reader")
     scanRef.current = qr
@@ -44,7 +50,7 @@ export default function ScanPage() {
         { fps: 10, qrbox: { width: 220, height: 220 } },
         async (decodedText: string) => {
           await stopScan()
-          await processUserId(decodedText.trim())
+          await processQR(decodedText.trim())
         },
         () => {}
       )
@@ -52,16 +58,10 @@ export default function ScanPage() {
       setScanning(true)
     }
 
-    try {
-      await tryStart("environment")
-    } catch {
-      try {
-        // Desktop thường không có "environment" → thử "user" (webcam trước)
-        await tryStart("user")
-      } catch (e) {
-        setError("Không thể khởi động camera. Hãy cho phép truy cập camera trong trình duyệt.")
-        scanRef.current = null
-      }
+    try { await tryStart("environment") }
+    catch {
+      try { await tryStart("user") }
+      catch { setError("Không thể khởi động camera. Kiểm tra quyền truy cập."); scanRef.current = null }
     }
   }
 
@@ -73,139 +73,164 @@ export default function ScanPage() {
     setScanning(false)
   }
 
-  async function processUserId(userId: string) {
-    setLoading(true)
-    setError("")
+  async function processQR(value: string) {
+    setLoading(true); setError("")
     try {
-      const res = await fetch("/api/scan", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ userId }),
+      const res  = await fetch("/api/scan", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: value }),
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? "Lỗi xử lý"); return }
       setResult(data)
-    } catch {
-      setError("Mất kết nối. Thử lại.")
-    } finally {
-      setLoading(false)
-    }
+    } catch { setError("Mất kết nối. Thử lại.") }
+    finally { setLoading(false) }
   }
 
-  useEffect(() => {
-    return () => { stopScan() }
-  }, [])
+  useEffect(() => { return () => { stopScan() } }, [])
+
+  if (!user) return null
 
   const roleLabel: Record<string,string> = {
-    student:  "Sinh viên",
-    lecturer: "Giảng viên",
-    staff:    "Cán bộ",
+    student:"Sinh viên", lecturer:"Giảng viên", staff:"Cán bộ",
   }
 
+  // Màu theo action
+  const isCheckout = result?.action === "checkout"
+  const accentColor = isCheckout ? "#f59e0b" : "#22c55e"
+  const accentBg    = isCheckout ? "#FFF7ED" : "#F0FDF4"
+  const accentBorder= isCheckout ? "#FDE68A" : "#BBF7D0"
+
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-4">
-      <div className="max-w-sm mx-auto">
-        <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
-          <Navbar title="IoT-SPMS · Quét QR" />
-          <div className="bg-white p-5">
+    <OperatorLayout user={user} activePage="Quét QR" title="Quét QR" backHref="/dashboard/operator">
+      <div style={{ maxWidth:400 }}>
 
-            <button onClick={() => { stopScan(); router.push("/dashboard/operator") }}
-              className="flex items-center gap-1 text-xs text-gray-400 mb-4 hover:text-gray-600">
-              ← Dashboard
-            </button>
-
-            <p className="font-medium text-gray-900 mb-1">Quét mã QR</p>
-            <p className="text-xs text-gray-400 mb-4">
-              Quét thẻ QR của sinh viên / giảng viên để check-in hoặc check-out
-            </p>
-
-            {/* Khung camera */}
-            <div className="relative rounded-xl overflow-hidden bg-black mb-4 aspect-square">
-              <div id="qr-reader" className="w-full h-full"/>
-              {!scanning && !loading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
-                  <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
-                    <span className="text-2xl">📷</span>
-                  </div>
-                  <p className="text-white/60 text-xs">Camera chưa bật</p>
-                </div>
-              )}
-              {loading && (
-                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                  <p className="text-white text-sm">Đang xử lý...</p>
-                </div>
-              )}
-              {scanning && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="w-48 h-48 border-2 border-white/60 rounded-xl"/>
-                </div>
-              )}
+        {/* Camera box */}
+        <div style={{
+          position:"relative", borderRadius:16, overflow:"hidden",
+          background:"#000", marginBottom:14, aspectRatio:"1",
+        }}>
+          <div id="qr-reader" style={{ width:"100%", height:"100%" }}/>
+          {!scanning && !loading && (
+            <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:8 }}>
+              <div style={{ width:56, height:56, background:"rgba(255,255,255,0.1)", borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontSize:26 }}>📷</span>
+              </div>
+              <p style={{ color:"rgba(255,255,255,0.6)", fontSize:12 }}>Camera chưa bật</p>
             </div>
+          )}
+          {loading && (
+            <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              <p style={{ color:"white", fontSize:14 }}>Đang xử lý...</p>
+            </div>
+          )}
+          {scanning && (
+            <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none" }}>
+              <div style={{ width:200, height:200, border:"2px solid rgba(255,255,255,0.7)", borderRadius:12 }}/>
+            </div>
+          )}
+        </div>
 
-            {!scanning ? (
-              <button onClick={startScan}
-                className="w-full bg-[#185FA5] hover:bg-[#0C447C] text-[#E6F1FB]
-                           font-medium py-3 rounded-xl text-sm transition-colors mb-3">
-                Bật camera & Quét
+        {/* Buttons */}
+        {!scanning ? (
+          <button onClick={startScan} style={{
+            width:"100%", height:46, background:"#003289", color:"white",
+            border:"none", borderRadius:12, fontSize:15, fontWeight:600,
+            cursor:"pointer", fontFamily:"'Inter',sans-serif", marginBottom:12,
+          }}>
+            Bật camera & Quét
+          </button>
+        ) : (
+          <button onClick={stopScan} style={{
+            width:"100%", height:46, background:"white", color:"#555",
+            border:"1px solid #e2e8f0", borderRadius:12, fontSize:14,
+            fontWeight:500, cursor:"pointer", fontFamily:"'Inter',sans-serif", marginBottom:12,
+          }}>
+            Dừng quét
+          </button>
+        )}
+
+        {error && (
+          <div style={{ background:"#FEF2F2", border:"1px solid #FECACA", borderRadius:12, padding:"12px 14px", marginBottom:12 }}>
+            <p style={{ color:"#DC2626", fontSize:13 }}>{error}</p>
+          </div>
+        )}
+
+        {/* Result */}
+        {result && (
+          <div style={{ background:accentBg, border:`1px solid ${accentBorder}`, borderRadius:14, overflow:"hidden", marginBottom:12 }}>
+            {/* Header */}
+            <div style={{ background:accentBorder, padding:"10px 14px", display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:18 }}>{isCheckout ? "🚗" : "✅"}</span>
+              <p style={{ fontWeight:700, fontSize:14, color: isCheckout?"#92400E":"#166534" }}>
+                {isCheckout ? "Checkout thành công" : "Check-in thành công"}
+              </p>
+            </div>
+            {/* Body */}
+            <div style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:8 }}>
+              {result.type === "guest" ? (
+                // Khách vãng lai
+                <>
+                  <Row label="Loại"      val="Khách vãng lai" />
+                  <Row label="Mã vé"     val={result.ticketId ?? "—"} />
+                  <Row label="Biển số"   val={result.licensePlate ?? "—"} />
+                  <Row label="Khu vực"   val={result.subZoneId} />
+                  {result.action === "checkout" && (
+                    <Row label="Phí thu" val={result.fee && result.fee > 0 ? result.fee.toLocaleString("vi-VN")+"đ" : "Miễn phí"} />
+                  )}
+                </>
+              ) : (
+                // Thành viên
+                <>
+                  <Row label="Họ tên"  val={result.userName ?? "—"} />
+                  <Row label="Vai trò" val={roleLabel[result.role ?? ""] ?? result.role ?? "—"} />
+                  <Row label="Khu vực" val={result.subZoneId} />
+                  {result.action === "checkout" && (
+                    <Row label="Phí thu" val={result.fee && result.fee > 0 ? result.fee.toLocaleString("vi-VN")+"đ" : "Miễn phí"} />
+                  )}
+                </>
+              )}
+              <Row label="Thời gian" val={new Date(result.time).toLocaleTimeString("vi-VN")} />
+            </div>
+            {/* Quét tiếp */}
+            <div style={{ padding:"0 14px 12px" }}>
+              <button onClick={() => { setResult(null); startScan() }} style={{
+                width:"100%", height:36, background:"white",
+                border:"1px solid #e2e8f0", borderRadius:8,
+                fontSize:12, fontWeight:500, cursor:"pointer",
+                fontFamily:"'Inter',sans-serif", color:"#555",
+              }}>
+                Quét xe tiếp theo
               </button>
-            ) : (
-              <button onClick={stopScan}
-                className="w-full border border-gray-200 text-gray-600 py-3
-                           rounded-xl text-sm hover:bg-gray-50 transition-colors mb-3">
-                Dừng quét
-              </button>
-            )}
+            </div>
+          </div>
+        )}
 
-            {error && (
-              <div className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-3">
-                <p className="text-red-600 text-sm">{error}</p>
+        {/* Hướng dẫn */}
+        <div style={{ background:"white", borderRadius:12, padding:14, border:"1px solid #e2e8f0" }}>
+          <p style={{ fontWeight:600, fontSize:12, color:"#000", marginBottom:8 }}>Hướng dẫn</p>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {[
+              "Quét QR trên thẻ SV/GV/CB → check-in hoặc check-out tự động",
+              "Quét QR trên vé khách vãng lai → checkout và tính phí",
+            ].map((t,i) => (
+              <div key={i} style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
+                <span style={{ fontSize:12, color:"#003289", flexShrink:0 }}>•</span>
+                <p style={{ fontSize:11, color:"#555", lineHeight:1.5 }}>{t}</p>
               </div>
-            )}
-
-            {result && (
-              <div className={`rounded-xl overflow-hidden border mb-3
-                ${result.action === "checkin"
-                  ? "border-green-100 bg-green-50"
-                  : "border-amber-100 bg-amber-50"}`}>
-                <div className={`px-4 py-2 flex items-center gap-2
-                  ${result.action === "checkin" ? "bg-green-100" : "bg-amber-100"}`}>
-                  <span>{result.action === "checkin" ? "✅" : "🚗"}</span>
-                  <p className={`text-sm font-medium
-                    ${result.action === "checkin" ? "text-green-800" : "text-amber-800"}`}>
-                    {result.action === "checkin" ? "Check-in thành công" : "Check-out thành công"}
-                  </p>
-                </div>
-                <div className="px-4 py-3 flex flex-col gap-1.5">
-                  {[
-                    ["Họ tên",    result.userName],
-                    ["Vai trò",   roleLabel[result.role] ?? result.role],
-                    ["Khu vực",   result.subZoneId],
-                    ...(result.action === "checkout"
-                      ? [["Phí thu", result.fee
-                          ? result.fee.toLocaleString("vi-VN") + "đ"
-                          : "Miễn phí"]]
-                      : []),
-                    ["Thời gian", new Date(result.time).toLocaleTimeString("vi-VN")],
-                  ].map(([label, value]) => (
-                    <div key={label} className="flex justify-between text-sm">
-                      <span className="text-gray-400">{label}</span>
-                      <span className="font-medium text-gray-800">{value}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="px-4 pb-3">
-                  <button onClick={() => { setResult(null); startScan() }}
-                    className="w-full border border-gray-200 text-gray-600 py-2
-                               rounded-lg text-xs hover:bg-white transition-colors">
-                    Quét xe tiếp theo
-                  </button>
-                </div>
-              </div>
-            )}
-
+            ))}
           </div>
         </div>
       </div>
+    </OperatorLayout>
+  )
+}
+
+function Row({ label, val }: { label:string; val:string }) {
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+      <span style={{ fontSize:12, color:"#868686" }}>{label}</span>
+      <span style={{ fontSize:12, fontWeight:600, color:"#000" }}>{val}</span>
     </div>
   )
 }
