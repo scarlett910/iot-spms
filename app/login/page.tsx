@@ -150,7 +150,7 @@ export default function LoginPage() {
             Đăng nhập
           </button>
           <button
-            onClick={() => router.push("/ticket/new")}
+            onClick={() => router.push("/guest")}
             style={{
               flex:         1,
               height:       80,
